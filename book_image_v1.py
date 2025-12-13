@@ -35,26 +35,19 @@ st.markdown("""
         font-size: 1.1rem;
         margin-bottom: 2rem;
     }
-    .success-box {
+    .prompt-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
         padding: 1rem;
-        background-color: #d4edda;
-        border-left: 5px solid #28a745;
         border-radius: 5px;
-        margin: 1rem 0;
+        margin-bottom: 1rem;
     }
-    .error-box {
+    .prompt-info {
+        background-color: #e7f3ff;
+        border-left: 4px solid #2196F3;
         padding: 1rem;
-        background-color: #f8d7da;
-        border-left: 5px solid #dc3545;
-        border-radius: 5px;
-        margin: 1rem 0;
-    }
-    .info-box {
-        padding: 1rem;
-        background-color: #d1ecf1;
-        border-left: 5px solid #17a2b8;
-        border-radius: 5px;
-        margin: 1rem 0;
+        margin-bottom: 1rem;
+        border-radius: 4px;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -64,6 +57,8 @@ if "generated_images" not in st.session_state:
     st.session_state.generated_images = []
 if "api_key_valid" not in st.session_state:
     st.session_state.api_key_valid = False
+if "current_prompt" not in st.session_state:
+    st.session_state.current_prompt = ""
 
 # Constants
 AZURE_ENDPOINT = "https://lever-mgvt2xmr-swedencentral.services.ai.azure.com/openai/deployments/FLUX-1.1-pro/images/generations"
@@ -128,8 +123,9 @@ with st.sidebar:
     Generate stunning AI-powered book covers using Azure's FLUX model.
     
     **Features:**
+    - Fully editable prompts
+    - Auto-generate suggestions
     - Custom book titles & descriptions
-    - Multiple style categories
     - Instant preview
     - Download in PNG/JPEG
     - History & batch generation
@@ -194,7 +190,7 @@ with col_input2:
         "Book Summary *",
         placeholder="Describe what your book is about. This helps the AI create a relevant cover design.",
         height=150,
-        help="A detailed description of your book's content, themes, and key ideas. This will influence the cover design."
+        help="A detailed description of your book's content, themes, and key ideas."
     )
 
 st.divider()
@@ -243,29 +239,7 @@ with st.expander("🎨 Advanced Customization"):
 
 st.divider()
 
-# Generate button
-col_button1, col_button2, col_button3 = st.columns(3)
-
-with col_button1:
-    generate_button = st.button(
-        "🎨 Generate Cover",
-        use_container_width=True,
-        type="primary"
-    )
-
-with col_button2:
-    if st.session_state.generated_images:
-        clear_button = st.button(
-            "🗑️ Clear History",
-            use_container_width=True
-        )
-    else:
-        clear_button = False
-
-with col_button3:
-    st.info(f"⏱️ Processing time: ~30-60 seconds")
-
-# Generate function
+# Build prompt function
 def build_prompt(title, summary, category, styles, colors, additional):
     """Build the complete prompt for image generation"""
     
@@ -290,8 +264,7 @@ def build_prompt(title, summary, category, styles, colors, additional):
     colors_str = ", ".join(colors) if colors else "Warm"
     color_palette = category_rules.get(category, "warm soft tones")
     
-    prompt = f"""
-Create a professional book cover illustration for: "{title}"
+    prompt = f"""Create a professional book cover illustration for: "{title}"
 
 Book Category: {category}
 Book Summary: {summary}
@@ -314,25 +287,35 @@ Composition Rules:
 
 {f'Additional Requirements: {additional}' if additional else ''}
 
-Generate a visually striking, professional book cover that immediately communicates the book's theme and appeals to the target audience.
-"""
+Generate a visually striking, professional book cover that immediately communicates the book's theme and appeals to the target audience."""
     
     return prompt
 
-# Handle generation
-if generate_button:
-    if not st.session_state.api_key_valid and not api_key:
-        st.error("❌ Please provide an Azure API Key")
-    elif not book_title or not book_summary:
-        st.error("❌ Please fill in Book Title and Summary")
-    else:
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-        result_container = st.container()
-        
-        try:
-            # Build prompt
-            prompt = build_prompt(
+# ============================================================================
+# EDITABLE PROMPT SECTION - MAIN FEATURE
+# ============================================================================
+
+st.markdown("""
+<div class="prompt-header">
+    <h2>🤖 AI Prompt Editor</h2>
+    <p>Edit the prompt below to customize your cover design. The prompt is sent directly to the AI.</p>
+</div>
+""", unsafe_allow_html=True)
+
+# Info box
+st.markdown("""
+<div class="prompt-info">
+    <strong>💡 Tip:</strong> The prompt below controls exactly what the AI creates. Edit keywords, add instructions, or completely rewrite it. Click "Auto-Generate" to rebuild from your book details.
+</div>
+""", unsafe_allow_html=True)
+
+# Auto-generate button and prompt together
+col_prompt_button, col_prompt_space = st.columns([1, 4])
+
+with col_prompt_button:
+    if st.button("🔄 Auto-Generate Prompt", use_container_width=True):
+        if book_title and book_summary:
+            auto_prompt = build_prompt(
                 book_title,
                 book_summary,
                 book_category,
@@ -340,6 +323,135 @@ if generate_button:
                 color_preference,
                 custom_prompt_addition
             )
+            st.session_state.current_prompt = auto_prompt
+            st.rerun()
+        else:
+            st.error("Enter title & summary first")
+
+# MAIN EDITABLE PROMPT TEXT AREA
+# This is where users actually edit the prompt
+user_prompt = st.text_area(
+    "Prompt (Editable) *",
+    value=st.session_state.current_prompt,
+    height=400,
+    placeholder="""Enter or edit your prompt here. Example:
+
+Create a professional book cover for "Book Title"
+- Style: Vector, geometric shapes
+- Colors: Warm tones - oranges, golds
+- Show: A symbolic metaphor for the book's theme
+- Include: Bold title text at bottom
+- No photographs or realistic images
+- Professional and modern look""",
+    help="This is the actual prompt sent to the AI. Edit it to customize your cover design.",
+    key="main_prompt_editor"
+)
+
+# Update session state with user's edits
+st.session_state.current_prompt = user_prompt
+
+# Quick action buttons below prompt
+col_action1, col_action2, col_action3, col_action4 = st.columns(4)
+
+with col_action1:
+    if st.button("📋 Copy Prompt", use_container_width=True):
+        st.info("✅ Select text above and press Ctrl+C (or Cmd+C on Mac)")
+
+with col_action2:
+    if st.button("🗑️ Clear Prompt", use_container_width=True):
+        st.session_state.current_prompt = ""
+        st.rerun()
+
+with col_action3:
+    if st.button("📥 Load Template", use_container_width=True):
+        template = """Create a professional book cover for: "{TITLE}"
+
+Key Visual Elements:
+- [Describe main visual element]
+- [Describe secondary element]
+- [Describe background]
+
+Style & Colors:
+- Style: [Vector/Realistic/Illustration/Abstract]
+- Primary Colors: [Color 1, Color 2, Color 3]
+- Tone: [Professional/Creative/Modern/Classic]
+
+Text:
+- Title: "{TITLE}" - [Size/Position/Style]
+- Subtitle: [If applicable]
+
+Additional Notes:
+- [Any special requirements]
+- [Avoid: List what to avoid]
+- [Target audience: Who will see this?]"""
+        st.session_state.current_prompt = template
+        st.rerun()
+
+with col_action4:
+    if st.button("✨ Generate", use_container_width=True):
+        st.session_state.generate_now = True
+
+st.divider()
+
+# Character count
+prompt_length = len(st.session_state.current_prompt)
+col_char1, col_char2 = st.columns([3, 1])
+
+with col_char1:
+    st.caption(f"Prompt length: {prompt_length} characters")
+
+with col_char2:
+    if prompt_length > 2000:
+        st.warning("⚠️ Prompt may be long")
+    elif prompt_length > 500:
+        st.success("✅ Good length")
+    else:
+        st.info("ℹ️ Add more details")
+
+st.divider()
+
+# ============================================================================
+# GENERATE SECTION
+# ============================================================================
+
+col_button1, col_button2, col_button3 = st.columns(3)
+
+with col_button1:
+    generate_button = st.button(
+        "🎨 Generate Cover",
+        use_container_width=True,
+        type="primary",
+        key="main_generate"
+    )
+
+with col_button2:
+    if st.session_state.generated_images:
+        clear_button = st.button(
+            "🗑️ Clear History",
+            use_container_width=True
+        )
+    else:
+        clear_button = False
+
+with col_button3:
+    st.info(f"⏱️ Processing: ~30-60 seconds")
+
+# Handle generation
+if generate_button or st.session_state.get("generate_now", False):
+    st.session_state.generate_now = False
+    
+    if not st.session_state.api_key_valid and not api_key:
+        st.error("❌ Please provide an Azure API Key")
+    elif not book_title or not st.session_state.current_prompt:
+        st.error("❌ Please enter Book Title and Prompt")
+    else:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+        result_container = st.container()
+        
+        try:
+            # Use the current editable prompt
+            prompt = st.session_state.current_prompt
             
             headers = {
                 "Content-Type": "application/json",
@@ -385,7 +497,8 @@ if generate_button:
                             "category": book_category,
                             "timestamp": datetime.now(),
                             "size": image_size,
-                            "summary": book_summary
+                            "summary": book_summary,
+                            "prompt": prompt
                         })
                     else:
                         st.error(f"❌ No data returned for image {i+1}")
@@ -485,8 +598,16 @@ if st.session_state.generated_images:
                         st.caption(f"🏷️ {img_data['category']}")
                         st.caption(f"⏰ {img_data['timestamp'].strftime('%H:%M')}")
                         
-                        with st.expander("📝 Summary"):
+                        with st.expander("📝 View Details"):
+                            st.markdown("**Summary:**")
                             st.write(img_data['summary'])
+                            st.markdown("**Prompt:**")
+                            st.code(img_data['prompt'], language="text")
+                            
+                            # Button to load this prompt
+                            if st.button(f"📥 Load This Prompt", key=f"load_prompt_{img_idx}"):
+                                st.session_state.current_prompt = img_data['prompt']
+                                st.rerun()
                         
                         st.download_button(
                             label="⬇️ Download",
