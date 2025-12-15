@@ -95,7 +95,7 @@ with st.sidebar:
     
     image_size = st.selectbox(
         "Image Size",
-        ["1024x1024", "1024x576", "576x1024"],
+        ["1024x1024", "1024x576", "1280x1920"],
         help="Choose the aspect ratio for your book cover"
     )
     
