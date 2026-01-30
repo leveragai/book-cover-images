@@ -62,7 +62,7 @@ if "current_prompt" not in st.session_state:
 
 # Constants
 AZURE_ENDPOINT = "https://porchazureopenai.openai.azure.com/openai/deployments/gpt-image-1.5/images/generations"
-API_VERSION = "2025-04-01-preview"
+API_VERSION = "2024-02-01"
 
 # Sidebar
 with st.sidebar:
