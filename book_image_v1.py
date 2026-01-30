@@ -61,7 +61,7 @@ if "current_prompt" not in st.session_state:
     st.session_state.current_prompt = ""
 
 # Constants
-AZURE_ENDPOINT = "https://lever-mgvt2xmr-swedencentral.services.ai.azure.com/openai/deployments/FLUX-1.1-pro/images/generations"
+AZURE_ENDPOINT = "https://porchazureopenai.openai.azure.com/openai/deployments/gpt-image-1.5/images/generations"
 API_VERSION = "2025-04-01-preview"
 
 # Sidebar
@@ -437,10 +437,13 @@ with col_button3:
     st.info(f"⏱️ Processing: ~30-60 seconds")
 
 # Handle generation
+# Update the Generation Logic inside the "Handle generation" block:
 if generate_button or st.session_state.get("generate_now", False):
     st.session_state.generate_now = False
     
-    if not st.session_state.api_key_valid and not api_key:
+    current_api_key = api_key if api_key else os.getenv("BFL_API_KEY")
+
+    if not st.session_state.api_key_valid and not current_api_key:
         st.error("❌ Please provide an Azure API Key")
     elif not book_title or not st.session_state.current_prompt:
         st.error("❌ Please enter Book Title and Prompt")
@@ -450,28 +453,30 @@ if generate_button or st.session_state.get("generate_now", False):
         result_container = st.container()
         
         try:
-            # Use the current editable prompt
             prompt = st.session_state.current_prompt
             
+            # Updated Headers: Using Bearer token as per your curl example
             headers = {
                 "Content-Type": "application/json",
-                "api-key": api_key if api_key else os.getenv("BFL_API_KEY")
+                "Authorization": f"Bearer {current_api_key}"
             }
             
             url = f"{AZURE_ENDPOINT}?api-version={API_VERSION}"
             
-            # Generate images
             generated_this_batch = []
             
             for i in range(num_images):
                 status_text.text(f"🎨 Generating image {i+1}/{num_images}...")
                 progress_bar.progress((i) / num_images)
                 
+                # Updated Payload: Added quality and compression
                 payload = {
                     "prompt": prompt,
+                    "size": image_size,
+                    "quality": "medium",      # Required for 1.5
+                    "output_compression": 100, # Required for 1.5
                     "output_format": output_format,
-                    "n": 1,
-                    "size": image_size
+                    "n": 1
                 }
                 
                 response = requests.post(url, headers=headers, json=payload, timeout=120)
@@ -482,28 +487,23 @@ if generate_button or st.session_state.get("generate_now", False):
                     if "data" in result and len(result["data"]) > 0:
                         item = result["data"][0]
                         
-                        # Handle base64 or URL
+                        # Process b64_json
                         if "b64_json" in item:
                             image_data = base64.b64decode(item["b64_json"])
-                        elif "url" in item:
-                            img_response = requests.get(item["url"])
-                            image_data = img_response.content
-                        else:
-                            raise ValueError("No image data in response")
-                        
-                        generated_this_batch.append({
-                            "image": image_data,
-                            "title": book_title,
-                            "category": book_category,
-                            "timestamp": datetime.now(),
-                            "size": image_size,
-                            "summary": book_summary,
-                            "prompt": prompt
-                        })
+                            
+                            generated_this_batch.append({
+                                "image": image_data,
+                                "title": book_title,
+                                "category": book_category,
+                                "timestamp": datetime.now(),
+                                "size": image_size,
+                                "summary": book_summary,
+                                "prompt": prompt
+                            })
                     else:
                         st.error(f"❌ No data returned for image {i+1}")
                 else:
-                    st.error(f"❌ API Error {response.status_code}: {response.text[:200]}")
+                    st.error(f"❌ API Error {response.status_code}: {response.text}")
             
             progress_bar.progress(100)
             status_text.text("✅ Generation complete!")
@@ -538,7 +538,6 @@ if generate_button or st.session_state.get("generate_now", False):
         
         except Exception as e:
             st.error(f"❌ Error: {str(e)}")
-            st.info("💡 Make sure your API key is valid and you have sufficient credits")
 
 # Clear history
 if clear_button:
